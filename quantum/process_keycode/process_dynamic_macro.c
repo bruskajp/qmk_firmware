@@ -17,6 +17,7 @@
 
 /* Author: Wojciech Siewierski < wojciech dot siewierski at onet dot pl > */
 #include "process_dynamic_macro.h"
+#include <string.h>
 
 // default feedback method
 void dynamic_macro_led_blink(void) {
@@ -27,8 +28,50 @@ void dynamic_macro_led_blink(void) {
 #endif
 }
 
-/* User hooks for Dynamic Macros */
+/* These should be external defines */
+#define ERASE_NON_MACRO_INPUT_ON_REC_STOP
 
+/* Internal variables for Input Macros */
+uint16_t *input_macro_output = NULL;
+uint16_t input_macro_output_len;
+uint16_t dyn_macro_len = 0;
+
+/**
+ * Determine whether the input macro is active or not
+ */
+// TODO: JPB: Should this be a macro to make sure it is inlined?
+inline bool input_macro_active(void) {
+  return input_macro_output != NULL;
+}
+
+/**
+ * Process each keycode of the input macro output
+ * replacing the INPUT_MACRO_PLAY keycodes with the full dynamic macro ouput
+ */
+void process_input_macro(void) {
+    if (input_macro_output != NULL) {
+#ifdef ERASE_NON_MACRO_INPUT_ON_REC_STOP
+        for (size_t i=0; i<dyn_macro_len; ++i) {
+            SEND_STRING(SS_TAP(X_BSPACE));
+        }
+#endif
+        keyrecord_t record = {{{}, false, timer_read()}, {}};
+        char single_output[2] = {0,0};
+        for (uint16_t i = 0; i < input_macro_output_len; ++i) {
+            if (input_macro_output[i] == INPUT_MACRO_PLAY) {
+                process_dynamic_macro(DYN_MACRO_PLAY1, &record);
+            } else {
+                single_output[0] = input_macro_output[i];
+                SEND_STRING(single_output);
+            }
+        }
+
+        free(input_macro_output);
+        input_macro_output = NULL;
+    }
+}
+
+/* User hooks for Dynamic Macros */
 __attribute__((weak)) void dynamic_macro_record_start_user(void) { dynamic_macro_led_blink(); }
 
 __attribute__((weak)) void dynamic_macro_play_user(int8_t direction) { dynamic_macro_led_blink(); }
@@ -58,6 +101,7 @@ void dynamic_macro_record_start(keyrecord_t **macro_pointer, keyrecord_t *macro_
     clear_keyboard();
     layer_clear();
     *macro_pointer = macro_buffer;
+    dyn_macro_len = 0;
 }
 
 /**
@@ -109,6 +153,7 @@ void dynamic_macro_record_key(keyrecord_t *macro_buffer, keyrecord_t **macro_poi
     if (*macro_pointer - direction != macro2_end) {
         **macro_pointer = *record;
         *macro_pointer += direction;
+        ++dyn_macro_len;
     } else {
         dynamic_macro_record_key_user(direction, record);
     }
@@ -121,7 +166,9 @@ void dynamic_macro_record_key(keyrecord_t *macro_buffer, keyrecord_t **macro_poi
  * pointer to the end of the macro.
  */
 void dynamic_macro_record_end(keyrecord_t *macro_buffer, keyrecord_t *macro_pointer, int8_t direction, keyrecord_t **macro_end) {
-    dynamic_macro_record_end_user(direction);
+    if (!input_macro_active()) {
+        dynamic_macro_record_end_user(direction);
+    }
 
     /* Do not save the keys being held when stopping the recording,
      * i.e. the keys used to access the layer DYN_REC_STOP is on.
@@ -134,6 +181,10 @@ void dynamic_macro_record_end(keyrecord_t *macro_buffer, keyrecord_t *macro_poin
     dprintf("dynamic macro: slot %d saved, length: %d\n", DYNAMIC_MACRO_CURRENT_SLOT(), DYNAMIC_MACRO_CURRENT_LENGTH(macro_buffer, macro_pointer));
 
     *macro_end = macro_pointer;
+    
+    if (input_macro_active()) {
+        process_input_macro();
+    }
 }
 
 /* Handle the key events related to the dynamic macros. Should be
@@ -223,7 +274,9 @@ bool process_dynamic_macro(uint16_t keycode, keyrecord_t *record) {
                 if (record->event.pressed ^ (keycode != DYN_REC_STOP)) { /* Ignore the initial release
                                                                           * just after the recording
                                                                           * starts for DYN_REC_STOP. */
-                    switch (macro_id) {
+                    uint8_t old_macro_id = macro_id;
+                    macro_id = 0;
+                    switch (old_macro_id) {
                         case 1:
                             dynamic_macro_record_end(macro_buffer, macro_pointer, +1, &macro_end);
                             break;
@@ -231,7 +284,6 @@ bool process_dynamic_macro(uint16_t keycode, keyrecord_t *record) {
                             dynamic_macro_record_end(r_macro_buffer, macro_pointer, -1, &r_macro_end);
                             break;
                     }
-                    macro_id = 0;
                 }
                 return false;
 #ifdef DYNAMIC_MACRO_NO_NESTING
@@ -251,9 +303,21 @@ bool process_dynamic_macro(uint16_t keycode, keyrecord_t *record) {
                         break;
                 }
                 return true;
-                break;
         }
     }
 
     return true;
+}
+
+// TODO: JPB: Can I avoid malloc somehow?
+//            Can I just make it a static variable?
+//            Should I just assign a large buffer?
+//            Should it only expand as needed?
+void input_macro_start(uint16_t *output, uint16_t output_len, keyrecord_t *record) {
+  if (output != NULL) { 
+      input_macro_output = malloc(output_len * sizeof(output[0]));
+      memcpy(input_macro_output, output, output_len * sizeof(output[0]));
+      input_macro_output_len = output_len;
+      process_dynamic_macro(DYN_REC_START1, record);
+  }
 }

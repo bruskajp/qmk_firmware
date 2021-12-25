@@ -33,9 +33,13 @@
 #    define DYNAMIC_MACRO_SIZE 128
 #endif
 
+/* New name for the dynamic macro play keycode */
+#define INPUT_MACRO_PLAY DYN_MACRO_PLAY1
+
 void dynamic_macro_led_blink(void);
 bool process_dynamic_macro(uint16_t keycode, keyrecord_t *record);
 void dynamic_macro_record_start_user(void);
 void dynamic_macro_play_user(int8_t direction);
 void dynamic_macro_record_key_user(int8_t direction, keyrecord_t *record);
 void dynamic_macro_record_end_user(int8_t direction);
+void input_macro_start(uint16_t *output, uint16_t output_len, keyrecord_t *record);
