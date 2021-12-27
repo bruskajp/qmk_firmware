@@ -33,8 +33,14 @@
 #    define DYNAMIC_MACRO_SIZE 128
 #endif
 
-/* New name for the dynamic macro play keycode */
-#define INPUT_MACRO_PLAY DYN_MACRO_PLAY1
+/* This macro is used to trigger the input macro to play.
+ * One would assume that you would use DYN_MACRO_PLAY1;
+ * however, you cannot use enums with string literals in C (even u16 strs).
+ * The number 0x00 was chosen because it should not be used in a string
+ * besides the end of string marker
+ * Note: This does break the use of strlen
+*/
+#define INPUT_MACRO_PLAY "\x00"
 
 void dynamic_macro_led_blink(void);
 bool process_dynamic_macro(uint16_t keycode, keyrecord_t *record);
@@ -42,4 +48,4 @@ void dynamic_macro_record_start_user(void);
 void dynamic_macro_play_user(int8_t direction);
 void dynamic_macro_record_key_user(int8_t direction, keyrecord_t *record);
 void dynamic_macro_record_end_user(int8_t direction);
-void input_macro_start(uint16_t *output, uint16_t output_len, keyrecord_t *record);
+void input_macro_start(char *output, size_t output_len, keyrecord_t *record);

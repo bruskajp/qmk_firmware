@@ -28,18 +28,18 @@ void dynamic_macro_led_blink(void) {
 #endif
 }
 
-/* These should be external defines */
+// TODO: JPB: These should be external defines
 #define ERASE_NON_MACRO_INPUT_ON_REC_STOP
 
 /* Internal variables for Input Macros */
-uint16_t *input_macro_output = NULL;
-uint16_t input_macro_output_len;
-uint16_t dyn_macro_len = 0;
+char *input_macro_output = NULL;
+size_t input_macro_output_len;
+size_t dyn_macro_len = 0;
 
+// TODO: JPB: Should this be a macro to make sure it is inlined?
 /**
  * Determine whether the input macro is active or not
  */
-// TODO: JPB: Should this be a macro to make sure it is inlined?
 inline bool input_macro_active(void) {
   return input_macro_output != NULL;
 }
@@ -57,9 +57,9 @@ void process_input_macro(void) {
 #endif
         keyrecord_t record = {{{}, false, timer_read()}, {}};
         char single_output[2] = {0,0};
-        for (uint16_t i = 0; i < input_macro_output_len; ++i) {
-            if (input_macro_output[i] == INPUT_MACRO_PLAY) {
-                process_dynamic_macro(DYN_MACRO_PLAY1, &record);
+        for (size_t i = 0; i < input_macro_output_len; ++i) {
+            if (input_macro_output[i] == INPUT_MACRO_PLAY[0] && i != input_macro_output_len - 1) {
+                  process_dynamic_macro(DYN_MACRO_PLAY1, &record);
             } else {
                 single_output[0] = input_macro_output[i];
                 SEND_STRING(single_output);
@@ -70,6 +70,37 @@ void process_input_macro(void) {
         input_macro_output = NULL;
     }
 }
+
+//// TODO: JPB: Use PSTR
+//#define SENG_STRING_INPUT_MACRO(string) process_input_macro(string)
+//
+///**
+// * Process each keycode of the input macro output
+// * replacing the INPUT_MACRO_PLAY keycodes with the full dynamic macro ouput
+// */
+//void process_input_macro(const char *str, ) {
+//    if (str != NULL) {
+//#ifdef ERASE_NON_MACRO_INPUT_ON_REC_STOP
+//        for (size_t i=0; i<dyn_macro_len; ++i) {
+//            SEND_STRING(SS_TAP(X_BSPACE));
+//        }
+//#endif
+//        keyrecord_t record = {{{}, false, 0}, {}};
+//        char single_output[2] = {0,0};
+//        for (size_t i = 0; i < input_macro_output_len; ++i) {
+//            if (input_macro_output[i] == INPUT_MACRO_PLAY[0]) {
+//                record.event.time = timer_read();
+//                process_dynamic_macro(DYN_MACRO_PLAY1, &record);
+//            } else {
+//                single_output[0] = input_macro_output[i];
+//                SEND_STRING(single_output);
+//            }
+//        }
+//
+//        free(input_macro_output);
+//        input_macro_output = NULL;
+//    }
+//}
 
 /* User hooks for Dynamic Macros */
 __attribute__((weak)) void dynamic_macro_record_start_user(void) { dynamic_macro_led_blink(); }
@@ -309,11 +340,12 @@ bool process_dynamic_macro(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
+// TODO: JPB: Should I just make this use the value already stores in the macros
 // TODO: JPB: Can I avoid malloc somehow?
 //            Can I just make it a static variable?
 //            Should I just assign a large buffer?
 //            Should it only expand as needed?
-void input_macro_start(uint16_t *output, uint16_t output_len, keyrecord_t *record) {
+void input_macro_start(char *output, size_t output_len, keyrecord_t *record) {
   if (output != NULL) { 
       input_macro_output = malloc(output_len * sizeof(output[0]));
       memcpy(input_macro_output, output, output_len * sizeof(output[0]));
